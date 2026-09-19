@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { User } from 'firebase/auth';
+import { useGoogleLogin } from '@react-oauth/google';
 import {
   initAuth,
-  googleSignIn,
   logoutGoogle,
   getAccessToken,
   setCachedAccessToken,
+  GoogleUser,
+  handleLoginSuccess,
+  SCOPES,
 } from './lib/auth';
 import {
   createFaceTrackingSpreadsheet,
@@ -54,7 +56,7 @@ import {
 
 export default function App() {
   // Authentication & Google Workspace
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<GoogleUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // Camera & Face Tracking
@@ -208,19 +210,29 @@ export default function App() {
   };
 
   // Google Sign-In Handler
-  const handleSignIn = async () => {
-    setIsAuthLoading(true);
-    try {
-      const res = await googleSignIn();
-      if (res) {
-        setUser(res.user);
+  const loginWithGoogle = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setIsAuthLoading(true);
+      try {
+        const res = await handleLoginSuccess(tokenResponse, (currentUser, token) => {
+          setUser(currentUser);
+          setCachedAccessToken(token);
+        });
         showBanner(`Connected as ${res.user.displayName || res.user.email}`, 'success');
+      } catch (err: any) {
+        showBanner(err.message || 'Failed to fetch user profile.', 'error');
+      } finally {
+        setIsAuthLoading(false);
       }
-    } catch (err: any) {
-      showBanner(err.message || 'Google sign-in was canceled or failed.', 'error');
-    } finally {
-      setIsAuthLoading(false);
-    }
+    },
+    onError: (errorResponse) => {
+      showBanner('Google sign-in was canceled or failed.', 'error');
+    },
+    scope: SCOPES.join(' '),
+  });
+
+  const handleSignIn = () => {
+    loginWithGoogle();
   };
 
   // Google Sign-Out Handler

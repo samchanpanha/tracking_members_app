@@ -1,10 +1,10 @@
 import React from 'react';
 import { LogOut, RefreshCw, Table2, ExternalLink } from 'lucide-react';
-import { User } from 'firebase/auth';
+import { GoogleUser } from '../lib/auth';
 import { SheetsConfig } from '../types';
 
 interface SheetsSyncCardProps {
-  user: User | null;
+  user: GoogleUser | null;
   sheetsConfig: SheetsConfig;
   isLoading: boolean;
   onSignIn: () => void;

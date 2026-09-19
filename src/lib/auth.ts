@@ -1,57 +1,69 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithPopup,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signOut,
-  type User
-} from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
-
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
+export interface GoogleUser {
+  displayName: string | null;
+  email: string | null;
+  photoURL: string | null;
+}
 
 export const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.file',
 ];
 
-const provider = new GoogleAuthProvider();
-SCOPES.forEach(scope => provider.addScope(scope));
-
 let cachedAccessToken: string | null = null;
-let isSigningIn = false;
+let cachedUser: GoogleUser | null = null;
 
 export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthSuccess?: (user: GoogleUser, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    if (user && cachedAccessToken) {
-      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-    } else if (!isSigningIn) {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
-    }
-  });
+  const token = localStorage.getItem('google_access_token');
+  const userStr = localStorage.getItem('google_user');
+  if (token && userStr) {
+    cachedAccessToken = token;
+    cachedUser = JSON.parse(userStr);
+    if (onAuthSuccess) onAuthSuccess(cachedUser!, cachedAccessToken!);
+  } else {
+    if (onAuthFailure) onAuthFailure();
+  }
+  
+  // Return a dummy unsubscribe function for compatibility with App.tsx
+  return () => {};
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+export const handleLoginSuccess = async (
+  tokenResponse: any,
+  onSuccess: (user: GoogleUser, token: string) => void
+) => {
   try {
-    isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to acquire OAuth access token from Google.');
+    const accessToken = tokenResponse.access_token;
+    cachedAccessToken = accessToken;
+    localStorage.setItem('google_access_token', accessToken);
+
+    // Fetch user profile from Google OAuth2 API
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to fetch user profile.');
     }
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error: any) {
-    console.error('Google Sign-in Error:', error);
-    throw error;
-  } finally {
-    isSigningIn = false;
+
+    const data = await res.json();
+    cachedUser = {
+      displayName: data.name || null,
+      email: data.email || null,
+      photoURL: data.picture || null,
+    };
+    
+    localStorage.setItem('google_user', JSON.stringify(cachedUser));
+
+    onSuccess(cachedUser, accessToken);
+    return { user: cachedUser, accessToken };
+  } catch (err) {
+    console.error('Failed to get user profile', err);
+    throw err;
   }
 };
 
@@ -61,9 +73,16 @@ export const getAccessToken = async (): Promise<string | null> => {
 
 export const setCachedAccessToken = (token: string | null) => {
   cachedAccessToken = token;
+  if (token) {
+    localStorage.setItem('google_access_token', token);
+  } else {
+    localStorage.removeItem('google_access_token');
+  }
 };
 
 export const logoutGoogle = async () => {
-  await signOut(auth);
   cachedAccessToken = null;
+  cachedUser = null;
+  localStorage.removeItem('google_access_token');
+  localStorage.removeItem('google_user');
 };
