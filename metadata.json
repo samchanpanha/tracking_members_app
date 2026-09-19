@@ -1,0 +1,6 @@
+{
+  "name": "Live Face Tracker & Member Recognition",
+  "description": "Live face tracking, member enrollment with phone number, face recognition & QR code check-in, Google Sheets sync, and Telegram alerts.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
